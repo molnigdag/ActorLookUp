@@ -449,18 +449,9 @@ class ActorLookup {
                 })).sort((a, b) => b.popularity - a.popularity)
                 : [];
 
-            // If both filters are selected, take balanced representation from each
-            if (filters.movies && filters.tv) {
-                const topMovies = movieRoles.slice(0, 8);
-                const topTV = tvRoles.slice(0, 8);
-                // Combine and sort by popularity, then take top 15
-                roles = [...topMovies, ...topTV]
-                    .sort((a, b) => b.popularity - a.popularity)
-                    .slice(0, 15);
-            } else {
-                // Only one filter selected, take top 15 from that type
-                roles = (filters.movies ? movieRoles : tvRoles).slice(0, 15);
-            }
+            // Combine all roles and sort by popularity
+            roles = [...movieRoles, ...tvRoles]
+                .sort((a, b) => b.popularity - a.popularity);
 
             results.push({
                 id: person.id,
