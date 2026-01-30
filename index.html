@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Actor LookUp</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Actor LookUp</h1>
+            <p class="subtitle">Find actors by film, character, or name</p>
+        </header>
+
+        <main>
+            <div class="search-section">
+                <div class="search-tabs">
+                    <button class="tab-btn active" data-search-type="film">Search by Film</button>
+                    <button class="tab-btn" data-search-type="character">Search by Character</button>
+                    <button class="tab-btn" data-search-type="actor">Search by Actor Name</button>
+                </div>
+
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder="Enter film name...">
+                    <button id="search-btn">Search</button>
+                </div>
+            </div>
+
+            <div class="results-section">
+                <h2>Results</h2>
+                <div id="results-container">
+                    <p class="placeholder-text">Enter a search term above to find actors</p>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Actor LookUp App &copy; 2026</p>
+        </footer>
+    </div>
+
+    <script src="actors-database.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
