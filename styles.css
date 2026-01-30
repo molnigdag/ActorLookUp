@@ -160,11 +160,28 @@ header h1 {
 .actor-birthday {
     font-size: 1rem;
     color: #e94560;
-    margin-bottom: 15px;
+    margin-bottom: 5px;
 }
 
 .actor-birthday span {
     color: #a0a0a0;
+}
+
+.actor-status {
+    font-size: 0.95rem;
+    margin-bottom: 10px;
+}
+
+.actor-status span {
+    color: #a0a0a0;
+}
+
+.actor-status.alive {
+    color: #4ade80;
+}
+
+.actor-status.deceased {
+    color: #f87171;
 }
 
 .filmography {

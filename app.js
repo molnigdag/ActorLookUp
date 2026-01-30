@@ -113,12 +113,13 @@ class ActorLookup {
                 // Get top 10 cast members per movie
                 for (const castMember of creditsData.cast.slice(0, 10)) {
                     if (!actorMap.has(castMember.id)) {
-                        // Fetch actor details for birthday
+                        // Fetch actor details for birthday and deathday
                         const actorDetails = await this.getActorDetails(castMember.id);
                         actorMap.set(castMember.id, {
                             id: castMember.id,
                             name: castMember.name,
                             birthday: actorDetails.birthday,
+                            deathday: actorDetails.deathday,
                             profilePath: castMember.profile_path,
                             matchedRoles: [],
                             matchType: 'film'
@@ -172,6 +173,7 @@ class ActorLookup {
                                     id: castMember.id,
                                     name: castMember.name,
                                     birthday: actorDetails.birthday,
+                                    deathday: actorDetails.deathday,
                                     profilePath: castMember.profile_path,
                                     matchedRoles: [],
                                     matchType: 'character'
@@ -207,6 +209,7 @@ class ActorLookup {
                             id: person.id,
                             name: person.name,
                             birthday: actorDetails.birthday,
+                            deathday: actorDetails.deathday,
                             profilePath: person.profile_path,
                             matchedRoles: matchingRoles.slice(0, 10).map(role => ({
                                 film: role.title,
@@ -260,6 +263,7 @@ class ActorLookup {
                 id: person.id,
                 name: person.name,
                 birthday: actorDetails.birthday,
+                deathday: actorDetails.deathday,
                 profilePath: person.profile_path,
                 roles: roles,
                 matchedRoles: roles,
@@ -294,11 +298,21 @@ class ActorLookup {
     }
 
     createActorCard(actor) {
-        const age = actor.birthday ? this.calculateAge(actor.birthday) : null;
+        const isDeceased = !!actor.deathday;
+        const age = actor.birthday
+            ? (isDeceased ? this.calculateAgeAtDeath(actor.birthday, actor.deathday) : this.calculateAge(actor.birthday))
+            : null;
         const birthdayDisplay = actor.birthday
             ? this.formatBirthday(actor.birthday)
             : 'Unknown';
-        const ageDisplay = age ? ` (Age: ${age})` : '';
+
+        let statusDisplay = '';
+        if (isDeceased) {
+            const deathdayDisplay = this.formatBirthday(actor.deathday);
+            statusDisplay = `<p class="actor-status deceased"><span>Status:</span> Deceased (${deathdayDisplay})${age ? ` - Died at age ${age}` : ''}</p>`;
+        } else if (actor.birthday) {
+            statusDisplay = `<p class="actor-status alive"><span>Status:</span> Alive (Age: ${age})</p>`;
+        }
 
         const imageUrl = actor.profilePath
             ? `https://image.tmdb.org/t/p/w185${actor.profilePath}`
@@ -322,8 +336,9 @@ class ActorLookup {
                     <div class="actor-info">
                         <h3 class="actor-name">${actor.name}</h3>
                         <p class="actor-birthday">
-                            <span>Birthday:</span> ${birthdayDisplay}${ageDisplay}
+                            <span>Birthday:</span> ${birthdayDisplay}
                         </p>
+                        ${statusDisplay}
                     </div>
                 </div>
                 <div class="filmography">
@@ -351,6 +366,21 @@ class ActorLookup {
 
         // If birthday hasn't occurred yet this year, subtract 1
         if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+
+        return age;
+    }
+
+    calculateAgeAtDeath(birthday, deathday) {
+        const birthDate = new Date(birthday);
+        const deathDate = new Date(deathday);
+
+        let age = deathDate.getFullYear() - birthDate.getFullYear();
+        const monthDiff = deathDate.getMonth() - birthDate.getMonth();
+
+        // If birthday hadn't occurred yet in the year of death, subtract 1
+        if (monthDiff < 0 || (monthDiff === 0 && deathDate.getDate() < birthDate.getDate())) {
             age--;
         }
 
