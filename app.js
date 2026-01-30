@@ -8,8 +8,17 @@ class ActorLookup {
         this.searchBtn = document.getElementById('search-btn');
         this.resultsContainer = document.getElementById('results-container');
         this.tabButtons = document.querySelectorAll('.tab-btn');
+        this.filterMovies = document.getElementById('filter-movies');
+        this.filterTV = document.getElementById('filter-tv');
 
         this.init();
+    }
+
+    getFilters() {
+        return {
+            movies: this.filterMovies.checked,
+            tv: this.filterTV.checked
+        };
     }
 
     init() {
@@ -89,22 +98,42 @@ class ActorLookup {
     }
 
     async searchByFilm(query) {
-        // Search for both movies and TV series in parallel
-        const [movieResponse, tvResponse] = await Promise.all([
-            fetch(`${this.baseUrl}/search/movie?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`),
-            fetch(`${this.baseUrl}/search/tv?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`)
-        ]);
+        const filters = this.getFilters();
 
-        const [movieData, tvData] = await Promise.all([
-            movieResponse.json(),
-            tvResponse.json()
-        ]);
+        // Check if at least one filter is selected
+        if (!filters.movies && !filters.tv) {
+            return { type: 'film', movies: [] };
+        }
+
+        // Search for movies and TV series based on filters
+        const promises = [];
+        if (filters.movies) {
+            promises.push(fetch(`${this.baseUrl}/search/movie?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`));
+        }
+        if (filters.tv) {
+            promises.push(fetch(`${this.baseUrl}/search/tv?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`));
+        }
+
+        const responses = await Promise.all(promises);
+        const dataResults = await Promise.all(responses.map(r => r.json()));
+
+        let movieData = { results: [] };
+        let tvData = { results: [] };
+
+        if (filters.movies && filters.tv) {
+            movieData = dataResults[0];
+            tvData = dataResults[1];
+        } else if (filters.movies) {
+            movieData = dataResults[0];
+        } else if (filters.tv) {
+            tvData = dataResults[0];
+        }
 
         const mediaResults = [];
 
-        // Process movies (limit to 3)
-        if (movieData.results && movieData.results.length > 0) {
-            for (const movie of movieData.results.slice(0, 3)) {
+        // Process movies (limit to 5)
+        if (filters.movies && movieData.results && movieData.results.length > 0) {
+            for (const movie of movieData.results.slice(0, 5)) {
                 const creditsResponse = await fetch(
                     `${this.baseUrl}/movie/${movie.id}/credits?api_key=${this.apiKey}`
                 );
@@ -128,6 +157,7 @@ class ActorLookup {
                 mediaResults.push({
                     id: movie.id,
                     title: movie.title,
+                    releaseDate: movie.release_date || '0000-00-00',
                     year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A',
                     posterPath: movie.poster_path,
                     mediaType: 'movie',
@@ -136,9 +166,9 @@ class ActorLookup {
             }
         }
 
-        // Process TV series (limit to 3)
-        if (tvData.results && tvData.results.length > 0) {
-            for (const show of tvData.results.slice(0, 3)) {
+        // Process TV series (limit to 5)
+        if (filters.tv && tvData.results && tvData.results.length > 0) {
+            for (const show of tvData.results.slice(0, 5)) {
                 const creditsResponse = await fetch(
                     `${this.baseUrl}/tv/${show.id}/credits?api_key=${this.apiKey}`
                 );
@@ -162,6 +192,7 @@ class ActorLookup {
                 mediaResults.push({
                     id: show.id,
                     title: show.name,
+                    releaseDate: show.first_air_date || '0000-00-00',
                     year: show.first_air_date ? show.first_air_date.split('-')[0] : 'N/A',
                     posterPath: show.poster_path,
                     mediaType: 'tv',
@@ -170,28 +201,46 @@ class ActorLookup {
             }
         }
 
+        // Sort by release date (newest first)
+        mediaResults.sort((a, b) => {
+            const dateA = new Date(a.releaseDate);
+            const dateB = new Date(b.releaseDate);
+            return dateB - dateA;
+        });
+
         return { type: 'film', movies: mediaResults };
     }
 
     async searchByCharacter(query) {
-        // Search for actors, movies, and TV shows
-        const [personResponse, movieResponse, tvResponse] = await Promise.all([
-            fetch(`${this.baseUrl}/search/person?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`),
-            fetch(`${this.baseUrl}/search/movie?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`),
-            fetch(`${this.baseUrl}/search/tv?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`)
-        ]);
+        const filters = this.getFilters();
 
-        const [personData, movieData, tvData] = await Promise.all([
-            personResponse.json(),
-            movieResponse.json(),
-            tvResponse.json()
-        ]);
+        // Check if at least one filter is selected
+        if (!filters.movies && !filters.tv) {
+            return [];
+        }
+
+        // Search for actors, movies, and TV shows based on filters
+        const personResponse = await fetch(`${this.baseUrl}/search/person?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`);
+        const personData = await personResponse.json();
+
+        let movieData = { results: [] };
+        let tvData = { results: [] };
+
+        if (filters.movies) {
+            const movieResponse = await fetch(`${this.baseUrl}/search/movie?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`);
+            movieData = await movieResponse.json();
+        }
+
+        if (filters.tv) {
+            const tvResponse = await fetch(`${this.baseUrl}/search/tv?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`);
+            tvData = await tvResponse.json();
+        }
 
         const queryLower = query.toLowerCase();
         const actorMap = new Map();
 
         // Check movie credits for character names
-        if (movieData.results) {
+        if (filters.movies && movieData.results) {
             for (const movie of movieData.results.slice(0, 3)) {
                 const creditsResponse = await fetch(
                     `${this.baseUrl}/movie/${movie.id}/credits?api_key=${this.apiKey}`
@@ -226,7 +275,7 @@ class ActorLookup {
         }
 
         // Check TV credits for character names
-        if (tvData.results) {
+        if (filters.tv && tvData.results) {
             for (const show of tvData.results.slice(0, 3)) {
                 const creditsResponse = await fetch(
                     `${this.baseUrl}/tv/${show.id}/credits?api_key=${this.apiKey}`
@@ -263,15 +312,32 @@ class ActorLookup {
         // Also search known actors and check their filmography for character names
         if (personData.results) {
             for (const person of personData.results.slice(0, 5)) {
-                // Get both movie and TV credits
-                const [movieCredits, tvCredits] = await Promise.all([
-                    fetch(`${this.baseUrl}/person/${person.id}/movie_credits?api_key=${this.apiKey}`).then(r => r.json()),
-                    fetch(`${this.baseUrl}/person/${person.id}/tv_credits?api_key=${this.apiKey}`).then(r => r.json())
-                ]);
+                // Get movie and TV credits based on filters
+                const creditPromises = [];
+                if (filters.movies) {
+                    creditPromises.push(fetch(`${this.baseUrl}/person/${person.id}/movie_credits?api_key=${this.apiKey}`).then(r => r.json()));
+                }
+                if (filters.tv) {
+                    creditPromises.push(fetch(`${this.baseUrl}/person/${person.id}/tv_credits?api_key=${this.apiKey}`).then(r => r.json()));
+                }
+
+                const creditResults = await Promise.all(creditPromises);
+
+                let movieCredits = { cast: [] };
+                let tvCredits = { cast: [] };
+
+                if (filters.movies && filters.tv) {
+                    movieCredits = creditResults[0];
+                    tvCredits = creditResults[1];
+                } else if (filters.movies) {
+                    movieCredits = creditResults[0];
+                } else if (filters.tv) {
+                    tvCredits = creditResults[0];
+                }
 
                 const matchingRoles = [];
 
-                if (movieCredits.cast) {
+                if (filters.movies && movieCredits.cast) {
                     const movieRoles = movieCredits.cast.filter(role =>
                         role.character && role.character.toLowerCase().includes(queryLower)
                     ).map(role => ({
@@ -283,7 +349,7 @@ class ActorLookup {
                     matchingRoles.push(...movieRoles);
                 }
 
-                if (tvCredits.cast) {
+                if (filters.tv && tvCredits.cast) {
                     const tvRoles = tvCredits.cast.filter(role =>
                         role.character && role.character.toLowerCase().includes(queryLower)
                     ).map(role => ({
@@ -314,6 +380,13 @@ class ActorLookup {
     }
 
     async searchByActorName(query) {
+        const filters = this.getFilters();
+
+        // Check if at least one filter is selected
+        if (!filters.movies && !filters.tv) {
+            return [];
+        }
+
         const response = await fetch(
             `${this.baseUrl}/search/person?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`
         );
@@ -329,16 +402,33 @@ class ActorLookup {
             // Get full actor details including birthday
             const actorDetails = await this.getActorDetails(person.id);
 
-            // Get both movie and TV credits in parallel
-            const [movieCredits, tvCredits] = await Promise.all([
-                fetch(`${this.baseUrl}/person/${person.id}/movie_credits?api_key=${this.apiKey}`).then(r => r.json()),
-                fetch(`${this.baseUrl}/person/${person.id}/tv_credits?api_key=${this.apiKey}`).then(r => r.json())
-            ]);
+            // Get movie and TV credits based on filters
+            const creditPromises = [];
+            if (filters.movies) {
+                creditPromises.push(fetch(`${this.baseUrl}/person/${person.id}/movie_credits?api_key=${this.apiKey}`).then(r => r.json()));
+            }
+            if (filters.tv) {
+                creditPromises.push(fetch(`${this.baseUrl}/person/${person.id}/tv_credits?api_key=${this.apiKey}`).then(r => r.json()));
+            }
+
+            const creditResults = await Promise.all(creditPromises);
+
+            let movieCredits = { cast: [] };
+            let tvCredits = { cast: [] };
+
+            if (filters.movies && filters.tv) {
+                movieCredits = creditResults[0];
+                tvCredits = creditResults[1];
+            } else if (filters.movies) {
+                movieCredits = creditResults[0];
+            } else if (filters.tv) {
+                tvCredits = creditResults[0];
+            }
 
             const allRoles = [];
 
             // Add movie roles
-            if (movieCredits.cast) {
+            if (filters.movies && movieCredits.cast) {
                 const movieRoles = movieCredits.cast.map(role => ({
                     title: role.title,
                     character: role.character || 'Unknown',
@@ -350,7 +440,7 @@ class ActorLookup {
             }
 
             // Add TV roles
-            if (tvCredits.cast) {
+            if (filters.tv && tvCredits.cast) {
                 const tvRoles = tvCredits.cast.map(role => ({
                     title: role.name,
                     character: role.character || 'Unknown',
