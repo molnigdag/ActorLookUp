@@ -96,12 +96,12 @@ class ActorLookup {
         const movieData = await movieResponse.json();
 
         if (!movieData.results || movieData.results.length === 0) {
-            return [];
+            return { type: 'film', movies: [] };
         }
 
         // Get cast for the top movies (limit to 5 to avoid too many requests)
         const movies = movieData.results.slice(0, 5);
-        const actorMap = new Map();
+        const movieResults = [];
 
         for (const movie of movies) {
             const creditsResponse = await fetch(
@@ -109,32 +109,32 @@ class ActorLookup {
             );
             const creditsData = await creditsResponse.json();
 
+            const cast = [];
             if (creditsData.cast) {
                 // Get top 10 cast members per movie
                 for (const castMember of creditsData.cast.slice(0, 10)) {
-                    if (!actorMap.has(castMember.id)) {
-                        // Fetch actor details for birthday and deathday
-                        const actorDetails = await this.getActorDetails(castMember.id);
-                        actorMap.set(castMember.id, {
-                            id: castMember.id,
-                            name: castMember.name,
-                            birthday: actorDetails.birthday,
-                            deathday: actorDetails.deathday,
-                            profilePath: castMember.profile_path,
-                            matchedRoles: [],
-                            matchType: 'film'
-                        });
-                    }
-                    actorMap.get(castMember.id).matchedRoles.push({
-                        film: movie.title,
+                    const actorDetails = await this.getActorDetails(castMember.id);
+                    cast.push({
+                        id: castMember.id,
+                        name: castMember.name,
                         character: castMember.character,
-                        year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A'
+                        birthday: actorDetails.birthday,
+                        deathday: actorDetails.deathday,
+                        profilePath: castMember.profile_path
                     });
                 }
             }
+
+            movieResults.push({
+                id: movie.id,
+                title: movie.title,
+                year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A',
+                posterPath: movie.poster_path,
+                cast: cast
+            });
         }
 
-        return Array.from(actorMap.values());
+        return { type: 'film', movies: movieResults };
     }
 
     async searchByCharacter(query) {
@@ -282,19 +282,130 @@ class ActorLookup {
     }
 
     displayResults(results, query) {
+        // Handle film search results (grouped by movie)
+        if (results.type === 'film') {
+            if (results.movies.length === 0) {
+                this.showNoResults(query);
+                return;
+            }
+            const resultsHTML = results.movies.map(movie => this.createMovieCard(movie)).join('');
+            this.resultsContainer.innerHTML = resultsHTML;
+            this.attachDrillDownHandlers();
+            return;
+        }
+
+        // Handle actor/character search results
         if (results.length === 0) {
-            this.resultsContainer.innerHTML = `
-                <div class="no-results">
-                    <h3>No results found</h3>
-                    <p>No actors found matching "${query}"</p>
-                    <p>Try a different search term or category</p>
-                </div>
-            `;
+            this.showNoResults(query);
             return;
         }
 
         const resultsHTML = results.map(actor => this.createActorCard(actor)).join('');
         this.resultsContainer.innerHTML = resultsHTML;
+        this.attachDrillDownHandlers();
+    }
+
+    showNoResults(query) {
+        this.resultsContainer.innerHTML = `
+            <div class="no-results">
+                <h3>No results found</h3>
+                <p>No results found matching "${query}"</p>
+                <p>Try a different search term or category</p>
+            </div>
+        `;
+    }
+
+    createMovieCard(movie) {
+        const posterUrl = movie.posterPath
+            ? `https://image.tmdb.org/t/p/w185${movie.posterPath}`
+            : null;
+
+        const castHTML = movie.cast.map(actor => {
+            const isDeceased = !!actor.deathday;
+            const age = actor.birthday
+                ? (isDeceased ? this.calculateAgeAtDeath(actor.birthday, actor.deathday) : this.calculateAge(actor.birthday))
+                : null;
+            const statusClass = isDeceased ? 'deceased' : 'alive';
+            const statusText = isDeceased ? 'Deceased' : (age ? `Age: ${age}` : '');
+
+            const actorPhoto = actor.profilePath
+                ? `<img src="https://image.tmdb.org/t/p/w92${actor.profilePath}" alt="${actor.name}" class="cast-photo">`
+                : '<div class="cast-photo-placeholder"></div>';
+
+            return `
+                <div class="cast-member">
+                    ${actorPhoto}
+                    <div class="cast-info">
+                        <p class="cast-name">${actor.name}</p>
+                        <p class="cast-character">as ${actor.character}</p>
+                        ${statusText ? `<p class="cast-status ${statusClass}">${statusText}</p>` : ''}
+                    </div>
+                    <div class="cast-actions">
+                        <button class="drill-btn drill-character" data-character="${this.escapeHtml(actor.character)}" title="Search by character">Character</button>
+                        <button class="drill-btn drill-actor" data-actor="${this.escapeHtml(actor.name)}" title="Search by actor">Actor</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="movie-card">
+                <div class="movie-header">
+                    ${posterUrl ? `<img src="${posterUrl}" alt="${movie.title}" class="movie-poster">` : ''}
+                    <div class="movie-info">
+                        <h3 class="movie-title">${movie.title} (${movie.year})</h3>
+                        <p class="movie-cast-count">${movie.cast.length} cast members</p>
+                    </div>
+                </div>
+                <div class="movie-cast">
+                    <h4>Cast</h4>
+                    <div class="cast-list">
+                        ${castHTML}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    attachDrillDownHandlers() {
+        // Attach handlers for character drill-down buttons
+        document.querySelectorAll('.drill-character').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const character = e.target.dataset.character;
+                if (character) {
+                    this.switchToSearchType('character');
+                    this.searchInput.value = character;
+                    this.performSearch();
+                }
+            });
+        });
+
+        // Attach handlers for actor drill-down buttons
+        document.querySelectorAll('.drill-actor').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const actor = e.target.dataset.actor;
+                if (actor) {
+                    this.switchToSearchType('actor');
+                    this.searchInput.value = actor;
+                    this.performSearch();
+                }
+            });
+        });
+    }
+
+    switchToSearchType(type) {
+        this.searchType = type;
+        this.tabButtons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.searchType === type);
+        });
+        this.updatePlaceholder();
     }
 
     createActorCard(actor) {

@@ -279,6 +279,157 @@ footer {
     font-style: italic;
 }
 
+/* Movie card styles for film search */
+.movie-card {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-left: 4px solid #e94560;
+}
+
+.movie-header {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.movie-poster {
+    width: 120px;
+    height: 180px;
+    object-fit: cover;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.movie-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.movie-title {
+    font-size: 1.5rem;
+    color: #fff;
+    margin-bottom: 10px;
+}
+
+.movie-cast-count {
+    color: #a0a0a0;
+    font-size: 0.95rem;
+}
+
+.movie-cast h4 {
+    color: #a0a0a0;
+    font-size: 0.9rem;
+    margin-bottom: 15px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.cast-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cast-member {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    transition: background 0.2s ease;
+}
+
+.cast-member:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.cast-photo {
+    width: 50px;
+    height: 75px;
+    object-fit: cover;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+
+.cast-photo-placeholder {
+    width: 50px;
+    height: 75px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+
+.cast-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.cast-name {
+    font-size: 1rem;
+    color: #fff;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.cast-character {
+    font-size: 0.9rem;
+    color: #e94560;
+    font-style: italic;
+    margin-bottom: 4px;
+}
+
+.cast-status {
+    font-size: 0.8rem;
+}
+
+.cast-status.alive {
+    color: #4ade80;
+}
+
+.cast-status.deceased {
+    color: #f87171;
+}
+
+.cast-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.drill-btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.drill-btn.drill-character {
+    background: rgba(147, 51, 234, 0.3);
+    color: #c084fc;
+}
+
+.drill-btn.drill-character:hover {
+    background: rgba(147, 51, 234, 0.5);
+    color: #fff;
+}
+
+.drill-btn.drill-actor {
+    background: rgba(59, 130, 246, 0.3);
+    color: #60a5fa;
+}
+
+.drill-btn.drill-actor:hover {
+    background: rgba(59, 130, 246, 0.5);
+    color: #fff;
+}
+
 @media (max-width: 600px) {
     header h1 {
         font-size: 2rem;
@@ -305,5 +456,25 @@ footer {
     .actor-photo {
         width: 120px;
         height: 180px;
+    }
+
+    .movie-header {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    .movie-title {
+        font-size: 1.2rem;
+    }
+
+    .cast-member {
+        flex-wrap: wrap;
+    }
+
+    .cast-actions {
+        width: 100%;
+        justify-content: center;
+        margin-top: 10px;
     }
 }
