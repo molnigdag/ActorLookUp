@@ -425,36 +425,42 @@ class ActorLookup {
                 tvCredits = creditResults[0];
             }
 
-            const allRoles = [];
+            let roles = [];
 
-            // Add movie roles
-            if (filters.movies && movieCredits.cast) {
-                const movieRoles = movieCredits.cast.map(role => ({
+            // Get movie roles sorted by popularity
+            const movieRoles = (filters.movies && movieCredits.cast)
+                ? movieCredits.cast.map(role => ({
                     title: role.title,
                     character: role.character || 'Unknown',
                     year: role.release_date ? role.release_date.split('-')[0] : 'N/A',
                     mediaType: 'movie',
                     popularity: role.popularity || 0
-                }));
-                allRoles.push(...movieRoles);
-            }
+                })).sort((a, b) => b.popularity - a.popularity)
+                : [];
 
-            // Add TV roles
-            if (filters.tv && tvCredits.cast) {
-                const tvRoles = tvCredits.cast.map(role => ({
+            // Get TV roles sorted by popularity
+            const tvRoles = (filters.tv && tvCredits.cast)
+                ? tvCredits.cast.map(role => ({
                     title: role.name,
                     character: role.character || 'Unknown',
                     year: role.first_air_date ? role.first_air_date.split('-')[0] : 'N/A',
                     mediaType: 'tv',
                     popularity: role.popularity || 0
-                }));
-                allRoles.push(...tvRoles);
-            }
+                })).sort((a, b) => b.popularity - a.popularity)
+                : [];
 
-            // Sort by popularity and take top 15
-            const roles = allRoles
-                .sort((a, b) => b.popularity - a.popularity)
-                .slice(0, 15);
+            // If both filters are selected, take balanced representation from each
+            if (filters.movies && filters.tv) {
+                const topMovies = movieRoles.slice(0, 8);
+                const topTV = tvRoles.slice(0, 8);
+                // Combine and sort by popularity, then take top 15
+                roles = [...topMovies, ...topTV]
+                    .sort((a, b) => b.popularity - a.popularity)
+                    .slice(0, 15);
+            } else {
+                // Only one filter selected, take top 15 from that type
+                roles = (filters.movies ? movieRoles : tvRoles).slice(0, 15);
+            }
 
             results.push({
                 id: person.id,
