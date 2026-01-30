@@ -176,7 +176,7 @@ header h1 {
 }
 
 #results-container {
-    min-height: 200px;
+    min-height: 100px;
 }
 
 .placeholder-text {
