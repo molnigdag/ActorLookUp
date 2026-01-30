@@ -1,6 +1,8 @@
-// Actor Lookup App
+// Actor Lookup App with TMDB Integration
 class ActorLookup {
     constructor() {
+        this.apiKey = 'babe4b59612088a3d16e17093bd27ec4';
+        this.baseUrl = 'https://api.themoviedb.org/3';
         this.searchType = 'film';
         this.searchInput = document.getElementById('search-input');
         this.searchBtn = document.getElementById('search-btn');
@@ -54,85 +56,225 @@ class ActorLookup {
         this.searchInput.placeholder = placeholders[this.searchType];
     }
 
-    performSearch() {
-        const query = this.searchInput.value.trim().toLowerCase();
+    async performSearch() {
+        const query = this.searchInput.value.trim();
 
         if (!query) {
             this.showMessage('Please enter a search term');
             return;
         }
 
-        let results = [];
+        this.showLoading();
 
-        switch (this.searchType) {
-            case 'film':
-                results = this.searchByFilm(query);
-                break;
-            case 'character':
-                results = this.searchByCharacter(query);
-                break;
-            case 'actor':
-                results = this.searchByActorName(query);
-                break;
+        try {
+            let results = [];
+
+            switch (this.searchType) {
+                case 'film':
+                    results = await this.searchByFilm(query);
+                    break;
+                case 'character':
+                    results = await this.searchByCharacter(query);
+                    break;
+                case 'actor':
+                    results = await this.searchByActorName(query);
+                    break;
+            }
+
+            this.displayResults(results, query);
+        } catch (error) {
+            console.error('Search error:', error);
+            this.showMessage('An error occurred while searching. Please try again.');
+        }
+    }
+
+    async searchByFilm(query) {
+        // Search for movies
+        const movieResponse = await fetch(
+            `${this.baseUrl}/search/movie?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`
+        );
+        const movieData = await movieResponse.json();
+
+        if (!movieData.results || movieData.results.length === 0) {
+            return [];
         }
 
-        this.displayResults(results, query);
-    }
+        // Get cast for the top movies (limit to 5 to avoid too many requests)
+        const movies = movieData.results.slice(0, 5);
+        const actorMap = new Map();
 
-    searchByFilm(query) {
-        const results = [];
-
-        actorsDatabase.forEach(actor => {
-            const matchingRoles = actor.roles.filter(role =>
-                role.film.toLowerCase().includes(query)
+        for (const movie of movies) {
+            const creditsResponse = await fetch(
+                `${this.baseUrl}/movie/${movie.id}/credits?api_key=${this.apiKey}`
             );
+            const creditsData = await creditsResponse.json();
 
-            if (matchingRoles.length > 0) {
-                results.push({
-                    ...actor,
-                    matchedRoles: matchingRoles,
-                    matchType: 'film'
-                });
+            if (creditsData.cast) {
+                // Get top 10 cast members per movie
+                for (const castMember of creditsData.cast.slice(0, 10)) {
+                    if (!actorMap.has(castMember.id)) {
+                        // Fetch actor details for birthday
+                        const actorDetails = await this.getActorDetails(castMember.id);
+                        actorMap.set(castMember.id, {
+                            id: castMember.id,
+                            name: castMember.name,
+                            birthday: actorDetails.birthday,
+                            profilePath: castMember.profile_path,
+                            matchedRoles: [],
+                            matchType: 'film'
+                        });
+                    }
+                    actorMap.get(castMember.id).matchedRoles.push({
+                        film: movie.title,
+                        character: castMember.character,
+                        year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A'
+                    });
+                }
             }
-        });
+        }
 
-        return results;
+        return Array.from(actorMap.values());
     }
 
-    searchByCharacter(query) {
+    async searchByCharacter(query) {
+        // Search for actors first, then filter by character names
+        const personResponse = await fetch(
+            `${this.baseUrl}/search/person?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`
+        );
+        const personData = await personResponse.json();
+
+        const results = [];
+        const queryLower = query.toLowerCase();
+
+        // Also search through popular actors to find character matches
+        // We'll search for movies that might contain this character
+        const movieResponse = await fetch(
+            `${this.baseUrl}/search/movie?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`
+        );
+        const movieData = await movieResponse.json();
+
+        const actorMap = new Map();
+
+        // Check movie credits for character names
+        if (movieData.results) {
+            for (const movie of movieData.results.slice(0, 5)) {
+                const creditsResponse = await fetch(
+                    `${this.baseUrl}/movie/${movie.id}/credits?api_key=${this.apiKey}`
+                );
+                const creditsData = await creditsResponse.json();
+
+                if (creditsData.cast) {
+                    for (const castMember of creditsData.cast) {
+                        if (castMember.character && castMember.character.toLowerCase().includes(queryLower)) {
+                            if (!actorMap.has(castMember.id)) {
+                                const actorDetails = await this.getActorDetails(castMember.id);
+                                actorMap.set(castMember.id, {
+                                    id: castMember.id,
+                                    name: castMember.name,
+                                    birthday: actorDetails.birthday,
+                                    profilePath: castMember.profile_path,
+                                    matchedRoles: [],
+                                    matchType: 'character'
+                                });
+                            }
+                            actorMap.get(castMember.id).matchedRoles.push({
+                                film: movie.title,
+                                character: castMember.character,
+                                year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A'
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Also search known actors and check their filmography for character names
+        if (personData.results) {
+            for (const person of personData.results.slice(0, 5)) {
+                const creditsResponse = await fetch(
+                    `${this.baseUrl}/person/${person.id}/movie_credits?api_key=${this.apiKey}`
+                );
+                const creditsData = await creditsResponse.json();
+
+                if (creditsData.cast) {
+                    const matchingRoles = creditsData.cast.filter(role =>
+                        role.character && role.character.toLowerCase().includes(queryLower)
+                    );
+
+                    if (matchingRoles.length > 0 && !actorMap.has(person.id)) {
+                        const actorDetails = await this.getActorDetails(person.id);
+                        actorMap.set(person.id, {
+                            id: person.id,
+                            name: person.name,
+                            birthday: actorDetails.birthday,
+                            profilePath: person.profile_path,
+                            matchedRoles: matchingRoles.slice(0, 10).map(role => ({
+                                film: role.title,
+                                character: role.character,
+                                year: role.release_date ? role.release_date.split('-')[0] : 'N/A'
+                            })),
+                            matchType: 'character'
+                        });
+                    }
+                }
+            }
+        }
+
+        return Array.from(actorMap.values());
+    }
+
+    async searchByActorName(query) {
+        const response = await fetch(
+            `${this.baseUrl}/search/person?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`
+        );
+        const data = await response.json();
+
+        if (!data.results || data.results.length === 0) {
+            return [];
+        }
+
         const results = [];
 
-        actorsDatabase.forEach(actor => {
-            const matchingRoles = actor.roles.filter(role =>
-                role.character.toLowerCase().includes(query)
+        for (const person of data.results.slice(0, 10)) {
+            // Get full actor details including birthday
+            const actorDetails = await this.getActorDetails(person.id);
+
+            // Get movie credits
+            const creditsResponse = await fetch(
+                `${this.baseUrl}/person/${person.id}/movie_credits?api_key=${this.apiKey}`
             );
+            const creditsData = await creditsResponse.json();
 
-            if (matchingRoles.length > 0) {
-                results.push({
-                    ...actor,
-                    matchedRoles: matchingRoles,
-                    matchType: 'character'
-                });
-            }
-        });
+            const roles = creditsData.cast
+                ? creditsData.cast
+                    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+                    .slice(0, 15)
+                    .map(role => ({
+                        film: role.title,
+                        character: role.character || 'Unknown',
+                        year: role.release_date ? role.release_date.split('-')[0] : 'N/A'
+                    }))
+                : [];
+
+            results.push({
+                id: person.id,
+                name: person.name,
+                birthday: actorDetails.birthday,
+                profilePath: person.profile_path,
+                roles: roles,
+                matchedRoles: roles,
+                matchType: 'actor'
+            });
+        }
 
         return results;
     }
 
-    searchByActorName(query) {
-        const results = [];
-
-        actorsDatabase.forEach(actor => {
-            if (actor.name.toLowerCase().includes(query)) {
-                results.push({
-                    ...actor,
-                    matchedRoles: actor.roles,
-                    matchType: 'actor'
-                });
-            }
-        });
-
-        return results;
+    async getActorDetails(actorId) {
+        const response = await fetch(
+            `${this.baseUrl}/person/${actorId}?api_key=${this.apiKey}`
+        );
+        return await response.json();
     }
 
     displayResults(results, query) {
@@ -152,27 +294,38 @@ class ActorLookup {
     }
 
     createActorCard(actor) {
-        const age = this.calculateAge(actor.birthday);
+        const age = actor.birthday ? this.calculateAge(actor.birthday) : null;
+        const birthdayDisplay = actor.birthday
+            ? this.formatBirthday(actor.birthday)
+            : 'Unknown';
+        const ageDisplay = age ? ` (Age: ${age})` : '';
+
+        const imageUrl = actor.profilePath
+            ? `https://image.tmdb.org/t/p/w185${actor.profilePath}`
+            : null;
 
         let rolesHTML = '';
-        if (actor.matchType === 'actor') {
-            // Show all roles when searching by actor name
-            rolesHTML = actor.roles.map(role =>
+        const rolesToShow = actor.matchType === 'actor' ? actor.roles : actor.matchedRoles;
+
+        if (rolesToShow && rolesToShow.length > 0) {
+            rolesHTML = rolesToShow.map(role =>
                 `<span class="film-tag">${role.film} <span class="character">as ${role.character}</span> (${role.year})</span>`
             ).join('');
         } else {
-            // Show matched roles with highlight for film/character search
-            rolesHTML = actor.matchedRoles.map(role =>
-                `<span class="film-tag">${role.film} <span class="character">as ${role.character}</span> (${role.year})</span>`
-            ).join('');
+            rolesHTML = '<span class="film-tag">No film credits found</span>';
         }
 
         return `
             <div class="actor-card">
-                <h3 class="actor-name">${actor.name}</h3>
-                <p class="actor-birthday">
-                    <span>Birthday:</span> ${actor.birthday} (Age: ${age})
-                </p>
+                <div class="actor-header">
+                    ${imageUrl ? `<img src="${imageUrl}" alt="${actor.name}" class="actor-photo">` : ''}
+                    <div class="actor-info">
+                        <h3 class="actor-name">${actor.name}</h3>
+                        <p class="actor-birthday">
+                            <span>Birthday:</span> ${birthdayDisplay}${ageDisplay}
+                        </p>
+                    </div>
+                </div>
                 <div class="filmography">
                     <h4>${actor.matchType === 'actor' ? 'Filmography' : 'Matching Roles'}</h4>
                     <div class="film-list">
@@ -181,6 +334,12 @@ class ActorLookup {
                 </div>
             </div>
         `;
+    }
+
+    formatBirthday(dateString) {
+        const date = new Date(dateString);
+        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+        return date.toLocaleDateString('en-US', options);
     }
 
     calculateAge(birthday) {
@@ -196,6 +355,15 @@ class ActorLookup {
         }
 
         return age;
+    }
+
+    showLoading() {
+        this.resultsContainer.innerHTML = `
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Searching TMDB...</p>
+            </div>
+        `;
     }
 
     showMessage(message) {

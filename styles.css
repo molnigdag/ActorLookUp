@@ -216,6 +216,52 @@ footer {
     margin-top: 30px;
 }
 
+/* Actor photo and header layout */
+.actor-header {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.actor-photo {
+    width: 100px;
+    height: 150px;
+    object-fit: cover;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.actor-info {
+    flex: 1;
+}
+
+/* Loading spinner */
+.loading {
+    text-align: center;
+    padding: 50px;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(233, 69, 96, 0.2);
+    border-top-color: #e94560;
+    border-radius: 50%;
+    margin: 0 auto 20px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.loading p {
+    color: #a0a0a0;
+    font-style: italic;
+}
+
 @media (max-width: 600px) {
     header h1 {
         font-size: 2rem;
@@ -231,5 +277,16 @@ footer {
 
     .actor-name {
         font-size: 1.2rem;
+    }
+
+    .actor-header {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    .actor-photo {
+        width: 120px;
+        height: 180px;
     }
 }
