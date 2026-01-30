@@ -49,7 +49,7 @@ class ActorLookup {
 
     updatePlaceholder() {
         const placeholders = {
-            'film': 'Enter film name...',
+            'film': 'Enter film or TV series name...',
             'character': 'Enter character name...',
             'actor': 'Enter actor name...'
         };
@@ -89,76 +89,110 @@ class ActorLookup {
     }
 
     async searchByFilm(query) {
-        // Search for movies
-        const movieResponse = await fetch(
-            `${this.baseUrl}/search/movie?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`
-        );
-        const movieData = await movieResponse.json();
+        // Search for both movies and TV series in parallel
+        const [movieResponse, tvResponse] = await Promise.all([
+            fetch(`${this.baseUrl}/search/movie?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`),
+            fetch(`${this.baseUrl}/search/tv?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`)
+        ]);
 
-        if (!movieData.results || movieData.results.length === 0) {
-            return { type: 'film', movies: [] };
-        }
+        const [movieData, tvData] = await Promise.all([
+            movieResponse.json(),
+            tvResponse.json()
+        ]);
 
-        // Get cast for the top movies (limit to 5 to avoid too many requests)
-        const movies = movieData.results.slice(0, 5);
-        const movieResults = [];
+        const mediaResults = [];
 
-        for (const movie of movies) {
-            const creditsResponse = await fetch(
-                `${this.baseUrl}/movie/${movie.id}/credits?api_key=${this.apiKey}`
-            );
-            const creditsData = await creditsResponse.json();
+        // Process movies (limit to 3)
+        if (movieData.results && movieData.results.length > 0) {
+            for (const movie of movieData.results.slice(0, 3)) {
+                const creditsResponse = await fetch(
+                    `${this.baseUrl}/movie/${movie.id}/credits?api_key=${this.apiKey}`
+                );
+                const creditsData = await creditsResponse.json();
 
-            const cast = [];
-            if (creditsData.cast) {
-                // Get top 10 cast members per movie
-                for (const castMember of creditsData.cast.slice(0, 10)) {
-                    const actorDetails = await this.getActorDetails(castMember.id);
-                    cast.push({
-                        id: castMember.id,
-                        name: castMember.name,
-                        character: castMember.character,
-                        birthday: actorDetails.birthday,
-                        deathday: actorDetails.deathday,
-                        profilePath: castMember.profile_path
-                    });
+                const cast = [];
+                if (creditsData.cast) {
+                    for (const castMember of creditsData.cast.slice(0, 10)) {
+                        const actorDetails = await this.getActorDetails(castMember.id);
+                        cast.push({
+                            id: castMember.id,
+                            name: castMember.name,
+                            character: castMember.character,
+                            birthday: actorDetails.birthday,
+                            deathday: actorDetails.deathday,
+                            profilePath: castMember.profile_path
+                        });
+                    }
                 }
-            }
 
-            movieResults.push({
-                id: movie.id,
-                title: movie.title,
-                year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A',
-                posterPath: movie.poster_path,
-                cast: cast
-            });
+                mediaResults.push({
+                    id: movie.id,
+                    title: movie.title,
+                    year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A',
+                    posterPath: movie.poster_path,
+                    mediaType: 'movie',
+                    cast: cast
+                });
+            }
         }
 
-        return { type: 'film', movies: movieResults };
+        // Process TV series (limit to 3)
+        if (tvData.results && tvData.results.length > 0) {
+            for (const show of tvData.results.slice(0, 3)) {
+                const creditsResponse = await fetch(
+                    `${this.baseUrl}/tv/${show.id}/credits?api_key=${this.apiKey}`
+                );
+                const creditsData = await creditsResponse.json();
+
+                const cast = [];
+                if (creditsData.cast) {
+                    for (const castMember of creditsData.cast.slice(0, 10)) {
+                        const actorDetails = await this.getActorDetails(castMember.id);
+                        cast.push({
+                            id: castMember.id,
+                            name: castMember.name,
+                            character: castMember.character,
+                            birthday: actorDetails.birthday,
+                            deathday: actorDetails.deathday,
+                            profilePath: castMember.profile_path
+                        });
+                    }
+                }
+
+                mediaResults.push({
+                    id: show.id,
+                    title: show.name,
+                    year: show.first_air_date ? show.first_air_date.split('-')[0] : 'N/A',
+                    posterPath: show.poster_path,
+                    mediaType: 'tv',
+                    cast: cast
+                });
+            }
+        }
+
+        return { type: 'film', movies: mediaResults };
     }
 
     async searchByCharacter(query) {
-        // Search for actors first, then filter by character names
-        const personResponse = await fetch(
-            `${this.baseUrl}/search/person?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`
-        );
-        const personData = await personResponse.json();
+        // Search for actors, movies, and TV shows
+        const [personResponse, movieResponse, tvResponse] = await Promise.all([
+            fetch(`${this.baseUrl}/search/person?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`),
+            fetch(`${this.baseUrl}/search/movie?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`),
+            fetch(`${this.baseUrl}/search/tv?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`)
+        ]);
 
-        const results = [];
+        const [personData, movieData, tvData] = await Promise.all([
+            personResponse.json(),
+            movieResponse.json(),
+            tvResponse.json()
+        ]);
+
         const queryLower = query.toLowerCase();
-
-        // Also search through popular actors to find character matches
-        // We'll search for movies that might contain this character
-        const movieResponse = await fetch(
-            `${this.baseUrl}/search/movie?api_key=${this.apiKey}&query=${encodeURIComponent(query)}`
-        );
-        const movieData = await movieResponse.json();
-
         const actorMap = new Map();
 
         // Check movie credits for character names
         if (movieData.results) {
-            for (const movie of movieData.results.slice(0, 5)) {
+            for (const movie of movieData.results.slice(0, 3)) {
                 const creditsResponse = await fetch(
                     `${this.baseUrl}/movie/${movie.id}/credits?api_key=${this.apiKey}`
                 );
@@ -180,9 +214,45 @@ class ActorLookup {
                                 });
                             }
                             actorMap.get(castMember.id).matchedRoles.push({
-                                film: movie.title,
+                                title: movie.title,
                                 character: castMember.character,
-                                year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A'
+                                year: movie.release_date ? movie.release_date.split('-')[0] : 'N/A',
+                                mediaType: 'movie'
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check TV credits for character names
+        if (tvData.results) {
+            for (const show of tvData.results.slice(0, 3)) {
+                const creditsResponse = await fetch(
+                    `${this.baseUrl}/tv/${show.id}/credits?api_key=${this.apiKey}`
+                );
+                const creditsData = await creditsResponse.json();
+
+                if (creditsData.cast) {
+                    for (const castMember of creditsData.cast) {
+                        if (castMember.character && castMember.character.toLowerCase().includes(queryLower)) {
+                            if (!actorMap.has(castMember.id)) {
+                                const actorDetails = await this.getActorDetails(castMember.id);
+                                actorMap.set(castMember.id, {
+                                    id: castMember.id,
+                                    name: castMember.name,
+                                    birthday: actorDetails.birthday,
+                                    deathday: actorDetails.deathday,
+                                    profilePath: castMember.profile_path,
+                                    matchedRoles: [],
+                                    matchType: 'character'
+                                });
+                            }
+                            actorMap.get(castMember.id).matchedRoles.push({
+                                title: show.name,
+                                character: castMember.character,
+                                year: show.first_air_date ? show.first_air_date.split('-')[0] : 'N/A',
+                                mediaType: 'tv'
                             });
                         }
                     }
@@ -193,32 +263,49 @@ class ActorLookup {
         // Also search known actors and check their filmography for character names
         if (personData.results) {
             for (const person of personData.results.slice(0, 5)) {
-                const creditsResponse = await fetch(
-                    `${this.baseUrl}/person/${person.id}/movie_credits?api_key=${this.apiKey}`
-                );
-                const creditsData = await creditsResponse.json();
+                // Get both movie and TV credits
+                const [movieCredits, tvCredits] = await Promise.all([
+                    fetch(`${this.baseUrl}/person/${person.id}/movie_credits?api_key=${this.apiKey}`).then(r => r.json()),
+                    fetch(`${this.baseUrl}/person/${person.id}/tv_credits?api_key=${this.apiKey}`).then(r => r.json())
+                ]);
 
-                if (creditsData.cast) {
-                    const matchingRoles = creditsData.cast.filter(role =>
+                const matchingRoles = [];
+
+                if (movieCredits.cast) {
+                    const movieRoles = movieCredits.cast.filter(role =>
                         role.character && role.character.toLowerCase().includes(queryLower)
-                    );
+                    ).map(role => ({
+                        title: role.title,
+                        character: role.character,
+                        year: role.release_date ? role.release_date.split('-')[0] : 'N/A',
+                        mediaType: 'movie'
+                    }));
+                    matchingRoles.push(...movieRoles);
+                }
 
-                    if (matchingRoles.length > 0 && !actorMap.has(person.id)) {
-                        const actorDetails = await this.getActorDetails(person.id);
-                        actorMap.set(person.id, {
-                            id: person.id,
-                            name: person.name,
-                            birthday: actorDetails.birthday,
-                            deathday: actorDetails.deathday,
-                            profilePath: person.profile_path,
-                            matchedRoles: matchingRoles.slice(0, 10).map(role => ({
-                                film: role.title,
-                                character: role.character,
-                                year: role.release_date ? role.release_date.split('-')[0] : 'N/A'
-                            })),
-                            matchType: 'character'
-                        });
-                    }
+                if (tvCredits.cast) {
+                    const tvRoles = tvCredits.cast.filter(role =>
+                        role.character && role.character.toLowerCase().includes(queryLower)
+                    ).map(role => ({
+                        title: role.name,
+                        character: role.character,
+                        year: role.first_air_date ? role.first_air_date.split('-')[0] : 'N/A',
+                        mediaType: 'tv'
+                    }));
+                    matchingRoles.push(...tvRoles);
+                }
+
+                if (matchingRoles.length > 0 && !actorMap.has(person.id)) {
+                    const actorDetails = await this.getActorDetails(person.id);
+                    actorMap.set(person.id, {
+                        id: person.id,
+                        name: person.name,
+                        birthday: actorDetails.birthday,
+                        deathday: actorDetails.deathday,
+                        profilePath: person.profile_path,
+                        matchedRoles: matchingRoles.slice(0, 10),
+                        matchType: 'character'
+                    });
                 }
             }
         }
@@ -242,22 +329,42 @@ class ActorLookup {
             // Get full actor details including birthday
             const actorDetails = await this.getActorDetails(person.id);
 
-            // Get movie credits
-            const creditsResponse = await fetch(
-                `${this.baseUrl}/person/${person.id}/movie_credits?api_key=${this.apiKey}`
-            );
-            const creditsData = await creditsResponse.json();
+            // Get both movie and TV credits in parallel
+            const [movieCredits, tvCredits] = await Promise.all([
+                fetch(`${this.baseUrl}/person/${person.id}/movie_credits?api_key=${this.apiKey}`).then(r => r.json()),
+                fetch(`${this.baseUrl}/person/${person.id}/tv_credits?api_key=${this.apiKey}`).then(r => r.json())
+            ]);
 
-            const roles = creditsData.cast
-                ? creditsData.cast
-                    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
-                    .slice(0, 15)
-                    .map(role => ({
-                        film: role.title,
-                        character: role.character || 'Unknown',
-                        year: role.release_date ? role.release_date.split('-')[0] : 'N/A'
-                    }))
-                : [];
+            const allRoles = [];
+
+            // Add movie roles
+            if (movieCredits.cast) {
+                const movieRoles = movieCredits.cast.map(role => ({
+                    title: role.title,
+                    character: role.character || 'Unknown',
+                    year: role.release_date ? role.release_date.split('-')[0] : 'N/A',
+                    mediaType: 'movie',
+                    popularity: role.popularity || 0
+                }));
+                allRoles.push(...movieRoles);
+            }
+
+            // Add TV roles
+            if (tvCredits.cast) {
+                const tvRoles = tvCredits.cast.map(role => ({
+                    title: role.name,
+                    character: role.character || 'Unknown',
+                    year: role.first_air_date ? role.first_air_date.split('-')[0] : 'N/A',
+                    mediaType: 'tv',
+                    popularity: role.popularity || 0
+                }));
+                allRoles.push(...tvRoles);
+            }
+
+            // Sort by popularity and take top 15
+            const roles = allRoles
+                .sort((a, b) => b.popularity - a.popularity)
+                .slice(0, 15);
 
             results.push({
                 id: person.id,
@@ -320,6 +427,9 @@ class ActorLookup {
             ? `https://image.tmdb.org/t/p/w185${movie.posterPath}`
             : null;
 
+        const mediaTypeLabel = movie.mediaType === 'tv' ? 'TV Series' : 'Movie';
+        const mediaTypeClass = movie.mediaType === 'tv' ? 'media-tv' : 'media-movie';
+
         const castHTML = movie.cast.map(actor => {
             const isDeceased = !!actor.deathday;
             const age = actor.birthday
@@ -353,6 +463,7 @@ class ActorLookup {
                 <div class="movie-header">
                     ${posterUrl ? `<img src="${posterUrl}" alt="${movie.title}" class="movie-poster">` : ''}
                     <div class="movie-info">
+                        <span class="media-type-badge ${mediaTypeClass}">${mediaTypeLabel}</span>
                         <h3 class="movie-title">${movie.title} (${movie.year})</h3>
                         <p class="movie-cast-count">${movie.cast.length} cast members</p>
                     </div>
@@ -433,11 +544,13 @@ class ActorLookup {
         const rolesToShow = actor.matchType === 'actor' ? actor.roles : actor.matchedRoles;
 
         if (rolesToShow && rolesToShow.length > 0) {
-            rolesHTML = rolesToShow.map(role =>
-                `<span class="film-tag">${role.film} <span class="character">as ${role.character}</span> (${role.year})</span>`
-            ).join('');
+            rolesHTML = rolesToShow.map(role => {
+                const title = role.title || role.film;
+                const mediaIcon = role.mediaType === 'tv' ? '<span class="media-icon tv">TV</span>' : '<span class="media-icon movie">Film</span>';
+                return `<span class="film-tag">${mediaIcon} ${title} <span class="character">as ${role.character}</span> (${role.year})</span>`;
+            }).join('');
         } else {
-            rolesHTML = '<span class="film-tag">No film credits found</span>';
+            rolesHTML = '<span class="film-tag">No credits found</span>';
         }
 
         return `
