@@ -152,7 +152,7 @@ class ActorLookup {
     }
 
     createActorCard(actor) {
-        const age = this.calculateAge(actor.birthYear);
+        const age = this.calculateAge(actor.birthday);
 
         let rolesHTML = '';
         if (actor.matchType === 'actor') {
@@ -183,9 +183,19 @@ class ActorLookup {
         `;
     }
 
-    calculateAge(birthYear) {
-        const currentYear = new Date().getFullYear();
-        return currentYear - birthYear;
+    calculateAge(birthday) {
+        const birthDate = new Date(birthday);
+        const today = new Date();
+
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+
+        // If birthday hasn't occurred yet this year, subtract 1
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+
+        return age;
     }
 
     showMessage(message) {
